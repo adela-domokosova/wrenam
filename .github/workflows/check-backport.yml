@@ -10,8 +10,10 @@ permissions:
 jobs:
   backport:
     if: ${{ github.event.pull_request.merged }}
-    uses: WrenSecurity/.github/.github/workflows/backport-prepare.yml@main
+    uses: WrenSecurity/.github/.github/workflows/backport-prepare.yml@fix-actions-trigger
     with:
       event: ${{ github.event.action }}
       label: ${{ github.event.action == 'labeled' && github.event.label.name || '' }}
       pull_request: ${{ toJSON(github.event.pull_request) }}
+    secrets:
+      personal_access_token: ${{ secrets.PAT }}
