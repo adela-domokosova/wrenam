@@ -10,7 +10,7 @@ permissions:
 jobs:
   backport:
     if: ${{ github.event.pull_request.merged }}
-    uses: WrenSecurity/.github/.github/workflows/backport-prepare.yml@main
+    uses: adela-domokosova/.github/.github/workflows/backport-prepare.yml@fix-actions-trigger
     with:
       event: ${{ github.event.action }}
       label: ${{ github.event.action == 'labeled' && github.event.label.name || '' }}
