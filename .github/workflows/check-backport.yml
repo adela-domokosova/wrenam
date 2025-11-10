@@ -8,12 +8,24 @@ permissions:
   pull-requests: write
 
 jobs:
+  generate_token:
+    runs-on: ubuntu-latest
+    outputs:
+      app_token: ${{ steps.generate-token.outputs.token }}
+    steps:
+      - name: 
+        id: generate-token
+        uses: action/create-github-app-token@67018539274d69449ef7c02e8e71183d1719ab42
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }} 
   backport:
+    needs: generate_token
     if: ${{ github.event.pull_request.merged }}
-    uses: WrenSecurity/.github/.github/workflows/backport-prepare.yml@main
+    uses: adela-domokosova/.github/.github/workflows/backport-prepare.yml@fix-actions-test
     with:
       event: ${{ github.event.action }}
       label: ${{ github.event.action == 'labeled' && github.event.label.name || '' }}
       pull_request: ${{ toJSON(github.event.pull_request) }}
     secrets:
-      pull_request_token: ${{ secrets.PR_TOKEN }}
+      installation_token: ${{ needs.generate-token.outputs.app_token }}
