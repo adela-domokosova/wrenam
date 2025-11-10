@@ -13,12 +13,15 @@ jobs:
     outputs:
       app_token: ${{ steps.generate-token.outputs.token }}
     steps:
-      - name: 
+      - name: Generate GitHub App token
         id: generate-token
         uses: actions/create-github-app-token@67018539274d69449ef7c02e8e71183d1719ab42
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.PRIVATE_KEY }} 
+      - name: Debug token output
+        run: |
+          echo "Token length: $(echo '${{ steps.generate-token.outputs.token }}' | wc -c)"
   backport:
     needs: generate_token
     if: ${{ github.event.pull_request.merged }}
