@@ -86,7 +86,7 @@ jobs:
           BACKPORT_TARGET: ${{ matrix.target }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         with:
-          github-token: ${{ needs.prepare.outputs.installation_token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             github.rest.issues.createComment({
               issue_number: parseInt(process.env.PR_NUMBER, 10),
