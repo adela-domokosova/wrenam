@@ -103,7 +103,7 @@ jobs:
           BACKPORT_TARGET: ${{ matrix.target }}
           PR_JSON: ${{ toJson(github.event.pull_request) }}
         with:
-          github-token: ${{ needs.prepare.outputs.installation_token }}
+          github_token: ${{ needs.prepare.outputs.installation_token }}
           script: |
             const { repo, owner } = context.repo;
             const pr = JSON.parse(process.env.PR_JSON);
