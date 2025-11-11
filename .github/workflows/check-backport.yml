@@ -8,11 +8,12 @@ permissions:
   pull-requests: write
 
 jobs:
-  generate_token:
+  prepare:
     runs-on: ubuntu-latest
-    if: ${{ github.event.pull_request.merged }}
+    if: ${{ github.event.pull_request.merged == true }}
     outputs:
-      app_token: ${{ steps.generate-token.outputs.token }}
+      installation_token: ${{ steps.generate-token.outputs.token }}
+      targets: ${{ steps.prepare-parameters.outputs.targets }}
     steps:
       - name: Generate GitHub App token
         id: generate-token
@@ -20,14 +21,104 @@ jobs:
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.PRIVATE_KEY }} 
-      - name: Debug token output
-        run: |
-          echo "Token length: $(echo '${{ steps.generate-token.outputs.token }}' | wc -c)"
+      - name: Prepare parameters
+        id: prepare-parameters
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
+        env:
+          EVENT: ${{ github.event.action }}
+          LABEL: ${{ github.event.action == 'labeled' && github.event.label.name || '' }}
+          PULL_REQUEST: ${{ toJson(github.event.pull_request.labels) }}
+
+        with: 
+          script: |
+            const event = process.env.EVENT;
+            let targets = [];
+
+            if (event == "labeled"){
+              const label = process.env.LABEL;
+              if (label && label.startsWith("backport-")) {
+                targets = [label.replace("backport-", "")];
+              }
+            } else if (event === "closed") {
+              const labels = JSON.parse(process.env.PULL_REQUEST).map(l => l.name);
+              targets = labels
+                .filter(l => l.startsWith("backport-"))
+                .map(l => l.replace("backport-", ""));
+            }
+            core.setOutput("targets", JSON.stringify(targets));
   backport:
-    needs: generate_token
-    uses: adela-domokosova/.github/.github/workflows/backport-prepare.yml@fix-actions-test
-    with:
-      event: ${{ github.event.action }}
-      label: ${{ github.event.action == 'labeled' && github.event.label.name || '' }}
-      pull_request: ${{ toJSON(github.event.pull_request) }}
-      installation_token: ${{ needs.generate-token.outputs.app_token }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    if: ${{ needs.prepare.outputs.targets != '[]' }}
+    strategy:
+      matrix:
+        target: ${{ fromJSON(needs.prepare.outputs.targets) }} 
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+        with:
+          ref: ${{ matrix.target }}
+          fetch-depth: 0
+
+      - name: Create backport branch
+        id: create-branch
+        env:
+          BACKPORT_SOURCE: ${{ github.event.pull_request.base.ref }}
+          BACKPORT_BRANCH: backport/pr-${{ github.event.pull_request.number }}-${{ matrix.target }}
+          MERGE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          git config user.name "github-action"
+          git config user.email "<>"
+
+          git checkout -b $BACKPORT_BRANCH
+          while read -r commit_sha; do
+            if ! git cherry-pick "$commit_sha"; then
+              echo "conflict=true" >> $GITHUB_OUTPUT
+              exit
+            fi
+          done <<< "$(git log --pretty=format:%H --reverse $MERGE_COMMIT^1..$MERGE_COMMIT^2)"
+          git push origin $BACKPORT_BRANCH
+
+      - name: Handle backport conflict
+        if: steps.create-branch.outputs.conflict
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
+        env:
+          BACKPORT_TARGET: ${{ matrix.target }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        with:
+          github-token: ${{ needs.prepare.outputs.installation_token }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: parseInt(process.env.PR_NUMBER, 10),
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `Conflict creating backport branch for ${process.env.BACKPORT_TARGET}`
+            })
+
+      - name: Create backport pull request
+        if: ${{ !steps.create-branch.outputs.conflict }}
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
+        env:
+          BACKPORT_BRANCH: backport/pr-${{ github.event.pull_request.number }}-${{ matrix.target }}
+          BACKPORT_TARGET: ${{ matrix.target }}
+          PR_JSON: ${{ toJson(github.event.pull_request) }}
+        with:
+          github-token: ${{ needs.prepare.outputs.installation_token }}
+          script: |
+            const { repo, owner } = context.repo;
+            const pr = JSON.parse(process.env.PR_JSON);
+
+            await github.rest.pulls.create({
+              title: `Backport PR #${pr.number} to ${process.env.BACKPORT_TARGET}`,
+              owner,
+              repo,
+              head: process.env.BACKPORT_BRANCH,
+              base: process.env.BACKPORT_TARGET,
+              body: `This PR is auto-generated as a backport of #${pr.number}.
+
+              Original title: #${pr.title}
+              Original author: #${pr.user.login}
+              Original body: #${pr.body}`
+            });
+
+      #delete branch in case of conflict
