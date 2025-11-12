@@ -63,6 +63,7 @@ jobs:
       - name: Create backport branch
         id: create-branch
         env:
+          GITHUB_TOKEN: ${{ needs.prepare.outputs.installation_token }}
           BACKPORT_SOURCE: ${{ github.event.pull_request.base.ref }}
           BACKPORT_BRANCH: backport/pr-${{ github.event.pull_request.number }}-${{ matrix.target }}
           MERGE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
