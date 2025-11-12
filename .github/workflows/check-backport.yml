@@ -79,6 +79,7 @@ jobs:
             fi
           done <<< "$(git log --pretty=format:%H --reverse $MERGE_COMMIT^1..$MERGE_COMMIT^2)"
           git push origin $BACKPORT_BRANCH
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} $BACKPORT_BRANCH
 
       - name: Handle backport conflict
         if: steps.create-branch.outputs.conflict
