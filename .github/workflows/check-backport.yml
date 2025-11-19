@@ -8,10 +8,21 @@ permissions:
   pull-requests: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps: 
+      - name: Quick Check for App Credentials
+        run: |
+          APP_KEY="${{ secrets.BACKPORT_APP_KEY }}"
+          if [ -z "$APP_KEY" ]; then
+            echo "empty app key"
+          fi
   backport:
     if: ${{ github.event.pull_request.merged }}
-    uses: WrenSecurity/.github/.github/workflows/backport-prepare.yml@main
+    uses: adela-domokosova/.github/.github/workflows/backport-prepare.yml@test-backport
     with:
       event: ${{ github.event.action }}
       label: ${{ github.event.action == 'labeled' && github.event.label.name || '' }}
       pull_request: ${{ toJSON(github.event.pull_request) }}
+      app_id: ${{ vars.BACKPORT_APP_ID }}
+    secrets: inherit
