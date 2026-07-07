@@ -25,17 +25,19 @@
  * $Id: CookieUtils.java,v 1.6 2009/10/02 00:08:26 ericow Exp $
  *
  * Portions Copyrighted 2014-2016 ForgeRock AS.
- * Portions Copyrighted 2025 Wren Security
+ * Portions Copyrighted 2025-2026 Wren Security
  */
 
 package com.sun.identity.shared.encode;
 
-import static org.forgerock.openam.utils.Time.*;
+import static org.forgerock.openam.utils.Time.currentTimeMillis;
 
 import com.sun.identity.shared.Constants;
 import com.sun.identity.shared.configuration.SystemPropertiesManager;
 import com.sun.identity.shared.debug.Debug;
-
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.Collections;
@@ -47,10 +49,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.TimeZone;
-
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * Implements utility methods for handling Cookie.
@@ -453,14 +451,35 @@ public class CookieUtils {
      * @return The set of matching cookie domains. May contain null.
      */
     public static Set<String> getMatchingCookieDomains(HttpServletRequest request, Collection<String> cookieDomains) {
-        String host = request.getServerName();
+        String host = normalizeDomain(request.getServerName());
         Set<String> domains = new HashSet<>();
 
         for (String domain : cookieDomains) {
-            if (domain == null || host.contains(domain)) {
+            if (domain == null || domain.isEmpty()) {
+                domains.add(domain);
+                continue;
+            }
+
+            String normalizedDomain = normalizeDomain(domain);
+            if (host != null && (host.equals(normalizedDomain) || host.endsWith("." + normalizedDomain))) {
                 domains.add(domain);
             }
         }
         return domains;
+    }
+
+    private static String normalizeDomain(String domain) {
+        if (domain == null) {
+            return null;
+        }
+
+        String normalized = domain.toLowerCase(Locale.ROOT);
+        if (normalized.startsWith(".")) {
+            normalized = normalized.substring(1);
+        }
+        if (normalized.endsWith(".")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
     }
 }
