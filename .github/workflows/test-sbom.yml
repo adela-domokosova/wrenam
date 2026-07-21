@@ -1,0 +1,58 @@
+name: Test SBOM generation (fork only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: "Public wrensecurity/wrenam tag to pull from Docker Hub"
+        required: false
+        default: "latest"
+
+permissions:
+  contents: read
+
+jobs:
+  sbom_image:
+    name: Generate SBOM for Docker image (OS + packages)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull public image anonymously
+        run: docker pull wrensecurity/wrenam:${{ inputs.image-tag }}
+
+      - name: Generate CycloneDX SBOM from pulled image
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: wrensecurity/wrenam:${{ inputs.image-tag }}
+          format: cyclonedx-json
+          output-file: sbom-docker-image.cdx.json
+          artifact-name: sbom-docker-image
+          upload-artifact-retention: 7
+
+  sbom_source:
+    name: Generate SBOM for source dependencies (Maven, npm, C/C++)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Java
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: "temurin"
+          java-version: "21"
+          cache: "maven"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "lts/*"
+
+      - name: Generate CycloneDX SBOM for source dependencies
+        run: npx --yes @cyclonedx/cdxgen@12.8.0 -r -o sbom-source-deps.cdx.json .
+
+      - name: Upload source dependency SBOM
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: sbom-source-dependencies
+          path: sbom-source-deps.cdx.json
+          retention-days: 7
