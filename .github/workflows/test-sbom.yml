@@ -19,7 +19,7 @@ jobs:
       - name: Generate CycloneDX SBOM from pulled image
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         env:
-          SYFT_SELECT_CATALOGERS: "dpkg-db-cataloger"
+          SYFT_SELECT_CATALOGERS: "+dpkg-db-cataloger"
         with:
           image: wrensecurity/wrenam:${{ inputs.image-tag }}
           format: cyclonedx-json
