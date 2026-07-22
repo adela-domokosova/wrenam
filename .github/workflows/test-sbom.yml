@@ -1,0 +1,59 @@
+name: Test SBOM generation (fork only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: "Public wrensecurity/wrenam tag to pull from Docker Hub"
+        required: false
+        default: "latest"
+
+permissions:
+  contents: read
+
+jobs:
+  sbom_image:
+    name: Generate SBOM for Docker image (OS + packages)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate CycloneDX SBOM with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: 'wrensecurity/wrenam:${{ inputs.image-tag }}'
+          format: 'cyclonedx'
+          output: 'sbom-docker-image.cdx.json'
+          vuln-type: 'os'
+
+      - name: Upload clean OS SBOM
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: sbom-docker-image
+          path: sbom-docker-image.cdx.json
+          retention-days: 7
+
+  sbom_source:
+    name: Generate SBOM for source dependencies (Maven plugin)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Java
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: "temurin"
+          java-version: "21"
+          cache: "maven"
+
+      - name: Build project
+        run: mvn clean install -DskipTests
+
+      - name: Generate CycloneDX SBOM via cyclonedx-maven-plugin
+        run: mvn org.cyclonedx:cyclonedx-maven-plugin:2.9.2:makeAggregateBom -DoutputName=sbom-source-deps -DoutputFormat=json
+
+      - name: Upload source dependency SBOM
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: sbom-source-dependencies
+          path: target/sbom-source-deps.json
+          retention-days: 7
